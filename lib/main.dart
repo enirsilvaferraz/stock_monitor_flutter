@@ -1,23 +1,24 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:http/http.dart';
+import 'package:http/http.dart' as http;
 
 void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
   @override
-  Widget build(BuildContext context) =>
-      MaterialApp(
+  Widget build(BuildContext context) => MaterialApp(
         title: 'Flutter Demo',
         theme: ThemeData(primaryColor: Colors.white),
         home: Scaffold(
           backgroundColor: Colors.white,
           appBar: buildAppBar(),
-          body: buildBody(),
+          body: buildBody2(),
         ),
       );
 
-  PreferredSize buildAppBar() =>
-      PreferredSize(
+  PreferredSize buildAppBar() => PreferredSize(
         preferredSize: Size.fromHeight(100.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -35,7 +36,7 @@ class MyApp extends StatelessWidget {
       );
 
   ListView buildBody() {
-    var list = Presenter().getList();
+    List<Stock> list = List();
 
     return ListView.builder(
         itemCount: list.length,
@@ -45,8 +46,7 @@ class MyApp extends StatelessWidget {
         });
   }
 
-  Padding buildRow(Stock stock) =>
-      Padding(
+  Padding buildRow(Stock stock) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -72,44 +72,43 @@ class MyApp extends StatelessWidget {
           ],
         ),
       );
+
+  buildBody2() {
+    Future<Chart> chart = Business().fetchPost();
+
+    return FutureBuilder<Chart>(
+      future: chart,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return buildRow(Stock(snapshot.data));
+        } else {
+          return Text("Waiting...");
+        }
+      },
+    );
+  }
 }
 
 class Stock {
   String name, unit, quant, amount;
 
-  Stock(String name, String unit, String quant, String amount) {
-    this.name = name;
+  Stock(Chart chart) {
+    this.name = chart.result[0].meta.symbol;
     this.unit = unit;
     this.quant = quant;
     this.amount = amount;
   }
 }
 
-class Presenter {
-  List<Stock> getList() =>
-      [
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00"),
-        Stock("LINX3", "32,00", "300", "9600,00")
-      ];
-}
-
 class Business {
   //https://query1.finance.yahoo.com/v1/finance/quoteType/?symbol=ITUB4.SA
   //https://query1.finance.yahoo.com/v8/finance/chart/ITUB4.SA?interval=1d
 
-  String url =
-      'https://query1.finance.yahoo.com/v8/finance/chart/ITUB4.SA?interval=1d';
+  Future<Chart> fetchPost() async {
+    final response = await http.get(
+        'https://query1.finance.yahoo.com/v8/finance/chart/ITUB4.SA?interval=1d');
 
-  Future<http.Response> fetchPost() {
-    return http.get(url);
+    return Chart.fromJson(json.decode(response.body)['chart']);
   }
 }
 
@@ -120,40 +119,60 @@ class Chart {
   Chart({this.result, this.error});
 
   factory Chart.fromJson(Map<String, dynamic> json) {
-    var list = json['result'] as List;
     return Chart(
-        result: list.map((i) => Result.fromJson(i)).toList(),
-        error: json['error']
-    );
+        result:
+            (json['result'] as List).map((i) => Result.fromJson(i)).toList(),
+        error: json['error']);
   }
 }
 
 class Result {
+  Meta meta;
   Indicators indicators;
 
-  Result({this.indicators});
+  Result({this.meta, this.indicators});
 
-  factory Result.fromJson(Map<String, dynamic> json){
+  factory Result.fromJson(Map<String, dynamic> json) {
     return Result(
-        indicators: Indicators.fromJson(json['indicators'])
-    );
+        meta: Meta.fromJson(json['meta']),
+        indicators: Indicators.fromJson(json['indicators']));
+  }
+}
+
+class Meta {
+  String symbol;
+
+  Meta({this.symbol});
+
+  factory Meta.fromJson(Map<String, dynamic> json) {
+    return Meta(symbol: json['symbol']);
   }
 }
 
 class Indicators {
+  List<Quote> quote;
+
+  Indicators({this.quote});
+
+  factory Indicators.fromJson(Map<String, dynamic> json) {
+    return Indicators(
+        quote: (json['quote'] as List).map((i) => Quote.fromJson(i)).toList());
+  }
+}
+
+class Quote {
   List<double> high;
   List<double> close;
   List<double> low;
   List<double> open;
 
-  Indicators({this.high, this.close, this.low, this.open});
+  Quote({this.high, this.close, this.low, this.open});
 
-  factory Indicators.fromJson(Map<String, dynamic> json){
-    return Indicators(
+  factory Quote.fromJson(Map<String, dynamic> json) {
+    return Quote(
         high: json['high'].cast<double>(),
         close: json['close'].cast<double>(),
         low: json['low'].cast<double>(),
-        open: json['open'].cast<double>()
-    );
+        open: json['open'].cast<double>());
   }
 }
